@@ -12,18 +12,13 @@
 #include <climits>
 #include <cstdlib>
 #include <cmath>
-#include "parser.h" 
+#include "parser.h"
 #include <string>
-#include <iterator>
-#include <sstream>
-#include <map>
 #include <cstddef>
 #include <algorithm>
-
-bool startProgram(std::map<std::string, int> map);
+#include <utility>
 
 using namespace std;
-
 void Parser::syntax_error()
 {
     cout << "SYNTAX ERROR !!!\n";
@@ -47,497 +42,329 @@ Token Parser::expect(TokenType expected_type)
 // this function simply checks the next token without
 // consuming the input
 // Written by Mohsen Zohrevandi
-Token Parser::peek() {
+Token Parser::peek()
+{
     Token t = lexer.GetToken();
     lexer.UngetToken(t);
     return t;
 }
 
-int decryptVector(vector<std::string> v1, map<std::string, int> v2, vector<std::string> v3){
-    int answer = 0, tempNum;
-    Parser parser;
-    string temp;
-    int idx = 0;
-    string pieces = "START ";
 
-    for (int i = 0; i < v1.size() - 1; i += 2){
-        if (v1[i + 1] == "PARAM"){
-            pieces += std::to_string(v2[v3[idx]]) + " ";
-            idx ++;
+
+// Parsing
+vector<struct Var_struct> var;
+vector<struct Poly_struct> poly;
+vector<struct Term_struct> term;
+
+Token t;
+
+void Parser::parse_input(){
+    parse_program();
+    parse_inputs();
+}
+
+void Parser::parse_program(){
+    parse_poly_decl_section();
+    parse_start();
+}
+
+void Parser::parse_poly_decl_section(){
+    parse_poly_decl();
+
+    t = lexer.GetToken();
+
+    if(t.token_type == POLY){
+        parse_poly_decl_section();
+    }
+}
+
+void Parser::parse_poly_decl(){
+    t = lexer.GetToken();
+    if(t.token_type == POLY){
+        parse_polynomial_header();
+
+        t = lexer.GetToken();
+        if(t.token_type == EQUAL){
+            parse_polynomial_body();
+            t = lexer.GetToken();
+            if(t.token_type != SEMICOLON){
+                syntax_error();
+            }
+        }
+    }
+}
+
+void Parser::parse_polynomial_body(){
+    parse_term_list();
+}
+
+void Parser::parse_polynomial_header(){
+    struct Poly_struct newPoly;
+    newPoly.name = parse_polynomial_name();
+
+    t = lexer.GetToken();
+    if(t.token_type == LPAREN){
+        id_list.clear();
+        parse_id_list();
+        newPoly.var = id_list;
+
+        t = lexer.GetToken();
+        if(t.token_type != RPAREN) {
+            syntax_error();
+        }
+    }
+
+    poly.push_back(newPoly);
+}
+
+void Parser::parse_id_list() {
+    t = lexer.GetToken();
+    if(t.token_type == ID){
+        id_list.push_back(t.lexeme);
+        t = lexer.GetToken();
+        if(t.token_type == COMMA){
+            parse_id_list();
+        }
+
+    } else{
+        syntax_error();
+    }
+}
+
+string Parser::parse_polynomial_name() {
+    t = lexer.GetToken();
+    if(t.token_type != ID){
+        syntax_error();
+    }
+
+    return t.lexeme;
+}
+
+struct term_list* Parser::parse_term_list() {
+    auto* termList = new term_list;
+    struct term_list* newTerm;
+
+    termList->term = parse_term();
+    t = peek();
+    if(t.token_type == PLUS || t.token_type == MINUS) {
+        termList->op = parse_add_operator();
+        newTerm = parse_term_list();
+        termList->next = newTerm;
+    }
+
+    return termList;
+}
+
+struct term_struct* Parser::parse_term() {
+    auto* termInfo = new term_struct;
+    t = peek();
+    if(t.token_type == NUM){
+        t = lexer.GetToken();
+        termInfo->coefficient = parse_coefficient();
+
+        t = lexer.GetToken();
+        if(t.token_type == ID) {
+            monomial_list.clear();
+            parse_monomial_list();
+            termInfo->monoList = monomial_list;
+
+        }else{
+            termInfo->monoList = {};
+        }
+
+    } else if(t.token_type == ID){
+        t = lexer.GetToken();
+        parse_monomial_list();
+
+    }else{
+        syntax_error();
+    }
+
+    return termInfo;
+}
+
+void Parser::parse_monomial_list() {
+    monomial_list.clear();
+    t = lexer.GetToken();
+    if(t.token_type == ID) {
+        lexer.UngetToken(t);
+        monomial_list.push_back(*parse_monomial());
+    }
+}
+
+monomial* Parser::parse_monomial() {
+    auto *monoInfo = new monomial;
+    int idx = -1;
+    t = lexer.GetToken();
+    if(t.token_type == ID){
+        id_list.clear();
+        parse_id_list();
+
+        if (!id_list.empty()){
+            for (int i = 0; i < id_list.size(); i++){
+                if (id_list[i] == t.lexeme){
+                    idx = i;
+                    monoInfo->order = i;
+                    break;
+                }
+            }
+        }
+
+        if (idx != -1){
+            monoInfo->exponent = parse_exponent();
+        } else{
+            syntax_error();
+        }
+
+    } else{
+        syntax_error();
+    }
+
+    return monoInfo;
+}
+
+int Parser::parse_exponent() {
+    t = lexer.GetToken();
+    int num = INT_MAX;
+    if(t.token_type == POWER){
+        t = lexer.GetToken();
+        if(t.token_type == NUM) {
+            num = stoi(t.lexeme);
 
         } else{
-            pieces += v1[i] + " ";
-        }
-
-    }
-
-    stringstream ss;
-    ss << pieces;
-
-    while (!ss.eof()){
-        ss >> temp;
-        if (temp == "START"){
-            ss >> temp;
-            if (stringstream(temp) >> tempNum){
-                answer += tempNum;
-            }
-
-        } else if (temp == "^"){
-            ss >> temp;
-            if (stringstream(temp) >> tempNum){
-                answer = pow(answer, tempNum);
-            }
-        } else if (temp == "*"){
-            ss >> temp;
-            if (stringstream(temp) >> tempNum){
-                answer *= tempNum;
-            }
-
-
-        } else if (temp == "+"){
-            ss >> temp;
-            if (stringstream(temp) >> tempNum){
-                answer += tempNum;
-            }
-        } else if (temp == "-"){
-            ss >> temp;
-            if (stringstream(temp) >> tempNum){
-                answer -= tempNum;
-            }
+            syntax_error();
         }
     }
 
-    return answer;
-
+    return num;
 }
 
-std::string symbolToString(Token tok){
-    switch (tok.token_type){
-        case MINUS:
-            return "-";
-
+TokenType Parser::parse_add_operator() {
+    t = lexer.GetToken();
+    switch(t.token_type){
         case PLUS:
-            return "+";
+        case MINUS:
+            return t.token_type;
 
-        case POWER:
-            return "^";
+        default:
+            syntax_error();
     }
-
-    return "";
 }
 
-bool startProgram(map<std::string, int> map) {
-    std::map<std::string, int>::iterator it;
-    for (it = map.begin(); it != map.end(); it++){
-            if (it->second == INT_MAX){
-            return false;
-        }
+int Parser::parse_coefficient() {
+    t = lexer.GetToken();
+    if(t.token_type != NUM) {
+        syntax_error();
     }
 
-    return true;
+    return stoi(t.lexeme);
 }
 
-int main() {
-    LexicalAnalyzer lexer;
-    Token t;
-    Parser parser;
+void Parser::parse_start() {
+    t = lexer.GetToken();
+    if(t.token_type == START){
+        parse_statement_list();
+    }
+}
 
-    struct polyStruct {
-        std::string varName;
-        int varCount = 0;
-        std::vector<std::string> operation;
-        std::vector<std::string> param;
-        int line = -1;
-    };
-
-    struct analyze {
-        std::vector<std::string> operation;
-        int varCount = 0;
-    };
-
-    bool firstLoop;
-    bool programStart = false;
-
-    vector<std::string> tempVarList;
-    polyStruct newPoly = polyStruct();
-    analyze analyzer = analyze();
-    std::vector<std::string> inOrder;
-    std::vector<std::string> polyOrder;
-    std::vector<struct polyStruct> polyList;
-    std::vector<struct analyze> analyzeList;
-    std::map<std::string, int> firstAdd;
-
-    int idx = 0;
-
-    while (t.token_type != END_OF_FILE) {
+void Parser::parse_inputs() {
+    t = lexer.GetToken();
+    if(t.token_type == NUM){
         t = lexer.GetToken();
-        switch (t.token_type) {
-            case POLY:
-                if (programStart) {
-                    parser.syntax_error();
-                }
+        if(t.token_type == NUM){
+            parse_inputs();
+        }
+    } else{
+        syntax_error();
+    }
+}
 
-                firstLoop = true;
+void Parser::parse_statement_list() {
+    parse_statement();
+}
 
-                //if it is the end of the POLY declaration.
-                while (t.token_type != SEMICOLON) {
-                    if (firstLoop) {
-                        t = lexer.GetToken();
-                        //check if there is ID.
-                        if (t.token_type != ID) {
-                            parser.syntax_error();
-                        } else {
-                            //check if ID is already declared.
-                            if (!polyList.empty()) {
-                                for (auto &i : polyList) {
-                                    if (i.varName == t.lexeme) {
-                                        if (parser.errorCode == 0) {
-                                            parser.errorCode = 1;
-                                        }
-                                        if (!(find(parser.errorLine1.begin(), parser.errorLine1.end(), i.line) != parser.errorLine1.end()))
-                                            parser.errorLine1.push_back(i.line);
-                                        if (!(find(parser.errorLine1.begin(), parser.errorLine1.end(), t.line_no) != parser.errorLine1.end()))
-                                            parser.errorLine1.push_back(t.line_no);
+void Parser::parse_statement() {
+    Token tok = peek();
 
-                                    } else{
-                                        newPoly.varName = t.lexeme;
-                                        newPoly.line = t.line_no;
-                                    }
-                                }
-                            } else{
-                                newPoly.varName = t.lexeme;
-                                newPoly.line = t.line_no;
-                            }
-                        }
+    if (tok.token_type == INPUT){
+        parse_input_statement();
 
-                        t = lexer.GetToken();
+    } else if(tok.token_type == ID){
+        parse_poly_evaluation_statement();
 
-                        //check if the equal sign is followed by the variable.
-                        if (t.token_type != EQUAL) {
-                            if (t.token_type != LPAREN) {
-                                parser.syntax_error();
-                            }
+    } else{
+        syntax_error();
+    }
+}
 
-                            while (t.token_type != RPAREN) {
-                                t = lexer.GetToken();
-                                if (t.token_type != ID) {
-                                    parser.syntax_error();
-                                }
+void Parser::parse_poly_evaluation_statement() {
+    parse_polynomial_evaluation();
+    t = lexer.GetToken();
+    if(t.token_type == SEMICOLON){
+        syntax_error();
+    }
+}
 
-                                if((find(tempVarList.begin(), tempVarList.end(), t.lexeme) == tempVarList.end())){
-                                    tempVarList.push_back(t.lexeme);
-                                }
+void Parser::parse_input_statement() {
+    t = lexer.GetToken();
+    auto* st = new stmt;
+    if(t.token_type != INPUT){
+        syntax_error();
 
-                                t = lexer.GetToken();
+    } else{
+        t = lexer.GetToken();
+        if(t.token_type != ID) {
+            syntax_error();
 
-                                if (t.token_type != COMMA && t.token_type != RPAREN) {
-                                    parser.syntax_error();
-                                }
-                            }
-
-                            t = lexer.GetToken();
-                            if (t.token_type != EQUAL) {
-                                parser.syntax_error();
-                            }
-                        }
-                        t = lexer.GetToken();
-                    }
-
-                    //check coefficient.
-                    if (t.token_type == NUM) {
-                        newPoly.operation.push_back(t.lexeme);
-                        newPoly.operation.emplace_back("NUM");
-                    } else if (t.token_type == ID) {
-                        std::string varName = t.lexeme;
-                        if (!tempVarList.empty()) {
-                            if ((std::find(tempVarList.begin(), tempVarList.end(), varName) == tempVarList.end())) {
-                                if (parser.errorCode == 0 || parser.errorCode == 2) {
-                                    parser.errorCode = 2;
-                                    parser.errorLine2.push_back(t.line_no);
-                                }
-                            }
-                        } else{
-                            if (t.lexeme == "x"){
-                                newPoly.operation.push_back(varName);
-                                newPoly.operation.emplace_back("PARAM");
-                                newPoly.varCount += 1;
-                                newPoly.param.push_back(t.lexeme);
-                                firstAdd[t.lexeme] = t.line_no;
-                            } else{
-                                parser.errorCode = 2;
-                                parser.errorLine2.push_back(t.line_no);
-                            }
-                        }
-
-                    } else if (t.token_type == POWER || t.token_type == PLUS || t.token_type == MINUS) {
-                        std::string currentOperation = symbolToString(t);
-                        t = lexer.GetToken();
-                        if (t.token_type != NUM && t.token_type != ID) {
-                            parser.syntax_error();
-                        }
-
-                        newPoly.operation.push_back(currentOperation);
-                        newPoly.operation.emplace_back("OPERATION");
-                        newPoly.operation.push_back(t.lexeme);
-
-                        if (t.token_type == NUM){
-                            newPoly.operation.emplace_back("NUM");
-
-                        } else{
-                            if ((find(newPoly.param.begin(), newPoly.param.end(), t.lexeme) == newPoly.param.end())){
-                                newPoly.varCount += 1;
-                                newPoly.param.push_back(t.lexeme);
-                                newPoly.operation.emplace_back("PARAM");
-                            }
-                        }
-
-
-                    }
-
-                    t = lexer.GetToken();
-
-
-                    if (t.token_type == SEMICOLON) {
-                        polyList.push_back(newPoly);
-
-                        newPoly.varCount = 0;
-                        break;
-                        
-                    //Two operators times.
-                    } else if (t.token_type == ID) {
-                        newPoly.operation.emplace_back("*");
-                        newPoly.operation.emplace_back("OPERATION");
-                        newPoly.operation.push_back(t.lexeme);
-                        if (tempVarList.empty()){
-                            if (t.lexeme == "x"){
-                                newPoly.param.push_back(t.lexeme);
-                                newPoly.operation.emplace_back("PARAM");
-                            }
-
-                        } else {
-                            if ((std::find(tempVarList.begin(), tempVarList.end(), t.lexeme) == tempVarList.end())) {
-                                parser.errorCode = 2;
-                                parser.errorLine2.push_back(t.line_no);
-                            } else{
-                                newPoly.param.push_back(t.lexeme);
-                                newPoly.operation.emplace_back("PARAM");
-                            }
-                        }
-
-
-                        //Doing operation
-                    } else if (t.token_type == MINUS || t.token_type == PLUS || t.token_type == POWER) {
-                        newPoly.operation.push_back(symbolToString(t));
-                        newPoly.operation.emplace_back("OPERATION");
-                    } else{
-                        parser.syntax_error();
-                    }
-
-                    t = lexer.GetToken();
-                    if (t.token_type != SEMICOLON) {
-                        firstLoop = false;
-                    } else {
-                        polyList.push_back(newPoly);
-                        break;
-                    }
-                }
-
-                newPoly.varCount = 0;
-                newPoly.operation.clear();
-                newPoly.param.clear();
-                tempVarList.clear();
-                firstAdd.clear();
-
-                //DEBUG CODE.
-                /*for (int i = 0; i < polyList.size(); i++) {
-
-                    cout << "Current stored variable: " << polyList[i].varName << endl;
-                    cout << "param count: " << polyList[i].varCount << endl;
-                    for (std::string inf : polyList[i].operation) {
-                        cout << inf << " ";
-                    }
-
-                    cout << endl;
-                }*/
-                break;
-
-            case START:
-                programStart = true;
-                break;
-
-            case INPUT:
-                if (!programStart) {
-                    parser.syntax_error();
-                }
-                t = lexer.GetToken();
-                if (t.token_type != ID) {
-                    parser.syntax_error();
-                }
-
-                //Get input and make it in order.
-                if (parser.inputOrder.size() == 0){
-                    parser.inputOrder[t.lexeme] = INT_MAX;
-                    inOrder.push_back(t.lexeme);
-                } else{
-                    if (parser.inputOrder.count(t.lexeme) == 0){
-                        inOrder.push_back(t.lexeme);
-                        parser.inputOrder[t.lexeme] = INT_MAX;
-                    }
-                }
-
-                t = lexer.GetToken();
-
-                if (t.token_type != SEMICOLON) {
-                    parser.syntax_error();
-                }
-
-                break;
-
-            default:
-                //if no POLY is defined, print error.
-                if (!programStart) {
-                    parser.syntax_error();
-                }
-
-                vector<std::string> doCalculation;
-                int varSize = -1;
-                //G1(Z);
-                if (t.token_type == ID && parser.errorCode == 0) {
-                    for (auto & i : polyList) {
-                        if (i.varName == t.lexeme) {
-                            analyzer.operation = i.operation;;
-                            varSize = i.varCount;
-                            inOrder = i.param;
-                            polyOrder.push_back(t.lexeme);
-                            break;
-                        }
-                    }
-
-                    if (varSize == -1) {
-                        parser.errorCode = 3;
-                        parser.errorLine3.push_back(t.line_no);
-                    }
-
-                    t = lexer.GetToken();
-                }
-
-
-                if (t.token_type == LPAREN) {
-                    //Two Conditions here:
-                    //One: G(F);
-                    //Two: G(3);
-                    //In case one, it should be ID
-                    //Case two it should be NUM
-                    while (t.token_type != RPAREN) {
-                        t = lexer.GetToken();
-                        if (t.token_type == ID) {
-                            std::string varName = t.lexeme;
-                            if (parser.inputOrder.count(t.lexeme) > 0){
-                                analyzer.varCount += 1;
-
-                            } else if (parser.errorCode == 0 || parser.errorCode == 3) {
-                                parser.errorCode = 3;
-                                parser.errorLine3.push_back(t.line_no);
-
-                            } else {
-                                break;
-                            }
-
-                        //case two.
-                        } else if(t.token_type == NUM){
-                            parser.inputOrder[inOrder[idx]] = stoi(t.lexeme);
-                            analyzer.varCount += 1;
-                            idx++;
-                        }
-                    }
-
-                    if (analyzer.varCount != varSize && parser.errorCode == 0) {
-                        parser.errorCode = 4;
-                        parser.errorLine4.push_back(t.line_no);
-                    }
-
-                    t = lexer.GetToken();
-                    if (t.token_type != SEMICOLON) {
-                        parser.syntax_error();
-                    }
-
-                //The case that it is a series of numbers.
-                } else if (t.token_type == NUM) {
-                    for (int i = 0; i < polyOrder.size(); i++){
-                        if (!parser.inputOrder.empty()){
-                            struct polyStruct stmt = polyList[i];
-                            int cap = stmt.varCount;
-                            for (; idx < cap; idx ++){
-                                parser.inputOrder[inOrder[idx]] = stoi(t.lexeme);
-                                t = lexer.GetToken();
-                            }
-                        }
-                    }
-
-                }
-
-                switch (parser.errorCode){
-                    case 0:
-                        if (analyzeList.empty()){
-                            break;
-                        }
-
-                        if (startProgram(parser.inputOrder)){
-                            for (auto &i : analyzeList){
-                                int answer = decryptVector(i.operation, parser.inputOrder, inOrder);
-                                cout << answer << " ";
-                                parser.inputOrder.clear();
-                            }
-
-                            analyzeList.clear();
-                            //clear analyzer to keep the structure clean for multiple runs.
-                            analyzer.operation.clear();
-                        }
-
-                        break;
-
-                    case 1:
-                        cout << "Error Code 1: ";
-                        sort(parser.errorLine1.begin(), parser.errorLine1.end());
-                        for (int line : parser.errorLine1){
-                            cout << line << " ";
-                        }
-                        exit(1);
-
-                    case 2:
-                        cout << "Error Code 2: ";
-                        for (int line : parser.errorLine2){
-                            cout << line << " ";
-                        }
-                        exit(1);
-
-                    case 3:
-                        cout << "Error Code 3: ";
-                        for (int line : parser.errorLine3){
-                            cout << line << " ";
-                        }
-                        exit(1);
-
-                    case 4:
-                        cout << "Error Code 4: ";
-                        for (int line : parser.errorLine4){
-                            cout << line << " ";
-                        }
-                        exit(1);
-
-                }
-
-                if (!analyzer.operation.empty()){
-                    analyzeList.push_back(analyzer);
-                }
-
-                analyzer.operation.clear();
-                analyzer.varCount = 0;
-                break;
+        } else{
+            st->stmt_type = true;
+            st->var = INT_MAX;
+            t = lexer.GetToken();
+            if(t.token_type != SEMICOLON){
+                syntax_error();
+            }
         }
     }
+}
+
+void Parser::parse_polynomial_evaluation() {
+    std::string varName = parse_polynomial_name();
+    t = lexer.GetToken();
+    if(t.token_type == LPAREN){
+        parse_argument_list(varName);
+        t = lexer.GetToken();
+        if(t.token_type != RPAREN){
+            syntax_error();
+        }
+    }
+}
+
+
+void Parser::parse_argument_list(std::string varName) {
+    parse_argument();
+    t = lexer.GetToken();
+    if(t.token_type == COMMA){
+        parse_argument_list(std::move(varName));
+    } else{
+        syntax_error();
+    }
+}
+
+void Parser::parse_argument() {
 
 }
 
 
+int main()
+{
+    LexicalAnalyzer lexer;
+    Token token;
 
+    token = lexer.GetToken();
+    token.Print();
+    while (token.token_type != END_OF_FILE)
+    {
+        token = lexer.GetToken();
+        token.Print();
+    }
+}
