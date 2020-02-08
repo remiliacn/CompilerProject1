@@ -12,6 +12,7 @@
 #include "vector"
 
 std::vector<std::string> id_list;
+int inputIdx;
 
 struct term_struct{
     int coefficient;
@@ -40,19 +41,27 @@ struct stmt{
     int var;
 };
 
+std::vector<struct stmt> statement_list;
+
 struct poly_eval{
     std::string refName;
     struct args;
 };
 
+
+std::vector<struct poly_eval> poly_eval_list;
+
 struct args{
-    TokenType type;
-    int var;
-    int idx;
+    TokenType type = {};
+    int var = INT_MAX;
+    int idx = -1;
     struct poly_eval;
 };
 
-std::vector<struct stmt> statement_list;
+std::map<std::string, std::vector<struct args>> argumentMap;
+std::vector<struct args*> argList;
+std::vector<std::string> polyList;
+std::vector<std::string> inputList;
 
 struct Var_struct{
     std::string name;
@@ -95,10 +104,10 @@ private:
     void parse_poly_evaluation_statement();
     void parse_input_statement();
     void parse_polynomial_evaluation();
-    void parse_argument_list(std::string name);
-    void parse_argument();
+    void parse_argument_list(std::string varName);
+    args * parse_argument(std::string varName);
+    void execute_program();
 };
 
 
 #endif
-
