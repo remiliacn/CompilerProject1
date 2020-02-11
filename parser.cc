@@ -112,7 +112,7 @@ struct polynomial_header* Parser::parse_polynomial_header(){
     //vector<struct id_list*> list;
     struct id_list* param = new id_list;
     param->name = "x";
-    param->order = 1;
+    param->order = 0;
     //list.push_back(param);
     idVec.clear();
 
@@ -329,22 +329,18 @@ void Parser::parse_inputs(stmt* st) {
     t = expect(NUM);
     string debug = t.lexeme;
     inputNum.push_back(stoi(t.lexeme));
-    /*
-    for (int i = 0; i < inputMap.size(); i++) {
-        if (stmtVec[i]->variable == INT_MAX) {
-            stmtVec[i]->variable = stoi(t.lexeme);
-            break;
-        }
-    }
-    */
+
     t = peek();
-    if(t.token_type == NUM && tracer % polyVec.size() != 0) {
+    if(t.token_type == NUM) {
         tracer++;
-        parse_inputs(st);
+        if (tracer % polyVec.size() != 0){
+            parse_inputs(st);
+        } else{
+            execute_program(st);
+        }
 
     } else if (t.token_type == NUM){
         execute_program(st);
-    } else{
 
     }
 }
@@ -401,6 +397,10 @@ struct stmt* Parser::parse_input_statement() {
         inputMap[t.lexeme] = varIdx++;
         st->variable = INT_MAX;
         st->param_idx = inputMap[t.lexeme];
+
+    } else{
+        st->variable = INT_MAX;
+        st->param_idx = inputMap[t.lexeme];
     }
 
     expect(SEMICOLON);
@@ -419,9 +419,10 @@ struct stmt* Parser::parse_poly_evaluation_statement() {
 
 struct poly_eval* Parser::parse_polynomial_evaluation() {
     struct poly_eval* polyEval = new poly_eval;
+    t = peek();
     polyEval->polyName = parse_polynomial_name();
     argVec.clear();
-    expect(LPAREN);
+    t = expect(LPAREN);
     parse_argument_list();
     polyEval->args = argVec;
     expect(RPAREN);
@@ -435,7 +436,6 @@ void Parser::parse_argument_list() {
         parse_argument_list();
     }else{
         lexer.UngetToken(t);
-
     }
 }
 
@@ -467,27 +467,48 @@ struct argument* Parser::parse_argument() {
     return arg;
 }
 
-
+vector<int> evalTerm;
 void Parser::execute_program(struct stmt * start){
     struct stmt* ptr;
     int result;
     //assign_num();
     ptr = start;
-    while(ptr != nullptr){
-        switch (ptr->stmt_type) {
-            case POLYEVAL:
-                result = evaluate_polynomial(ptr->poly);
-                cout << result << endl;
-                counter = 0;
-                parse_inputs(ptr);
-                break;
-            case INPUT:
-                memory[ptr->param_idx] = inputNum[counter];
-                counter++;
-                break;
+    try{
+        while(ptr != nullptr){
+            switch (ptr->stmt_type) {
+                case POLYEVAL:
+                    result = 0;
+                    evaluate_polynomial(ptr->poly);
+                    if (evalTerm.empty()){
+                        cout << "something went huang." << endl;
+                    }
+
+                    for (auto &i : evalTerm){
+                        result += i;
+                    }
+
+                    cout << result << endl;
+                    //counter = 0;
+                    evalTerm.clear();
+                    break;
+
+                case INPUT:
+                    if (counter >= inputNum.size()){
+                        parse_inputs(ptr);
+                    }
+
+                    memory[ptr->param_idx] = inputNum[counter];
+                    counter++;
+                    break;
+            }
+
+            ptr = ptr->next;
         }
-        ptr = ptr->next;
+    } catch (exception &){
+
     }
+
+    exit(1);
 }
 
 
@@ -502,7 +523,7 @@ int evaluate_polynomial(struct poly_eval* poly) {
             for (size_t j = 0; j < argVec.size(); j++) {
                 if (argVec[j]->const_val == INT_MAX) {
                     if (argVec[j]->polyEval == nullptr) {
-                        cout << "DBUG: " << memory[argVec[j]->var_idx] << endl;
+                        //cout << "DBUG: " << memory[argVec[j]->var_idx] << endl;
                         val.push_back(memory[argVec[j]->var_idx]);
                     } else {
                         val.push_back(evaluate_polynomial(argVec[j]->polyEval));
@@ -515,46 +536,47 @@ int evaluate_polynomial(struct poly_eval* poly) {
             term_list* terms = polyVec[i]->body->body;
             res = eval_term(terms, val);
             val.clear();
-
+            break;
         }
     }
+
     return res;
 }
 
-size_t valueIdx = 0;
-vector<int> evalResult;
+
+bool firstEvaluation = true;
 int eval_term(struct term_list* terms, vector<int> val) {
-    int res = 0;
+
+    int res = 1;
     //coefficient.push_back(polyVec[i]->body->body->term->coefficient);
-    //M^6 + 3 N - N^2 + 71;
+    //2x^2+y^2
     int coefficient = terms->term->coefficient;
     monoVec = terms->term->mono_list;
     if (!monoVec.empty()){
         for(size_t k = 0; k < monoVec.size(); k++){
             int exponent = terms->term->mono_list[k]->exponent;
-            int order = monoVec[k]->order;
-            int value = val[order + valueIdx];
+            int orderDebug = monoVec[k]->order;
+            int value = val[monoVec[k]->order];
             res *= pow(value, exponent);
         }
     }
 
     res *= coefficient;
+    if (firstEvaluation){
+        evalTerm.push_back(res);
+    }
 
+    firstEvaluation = false;
     switch(terms->addOperator){
         case PLUS:
-            evalResult.push_back(res);
+            evalTerm.push_back(eval_term(terms->next, val));
             break;
-
         case MINUS:
-            evalResult.push_back(res * -1);
+            evalTerm.push_back(eval_term(terms->next, val) * -1);
             break;
     }
 
-    for(auto &i : evalResult){
-        res += i;
-    }
-
-    valueIdx++;
+    firstEvaluation = true;
     return res;
 }
 
