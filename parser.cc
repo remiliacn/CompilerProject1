@@ -413,15 +413,15 @@ struct stmt* Parser::parse_poly_evaluation_statement() {
     st->stmt_type = POLYEVAL;
     st->poly = parse_polynomial_evaluation();
     expect(SEMICOLON);
+    argVec.clear();
     return st;
 }
 
 
 struct poly_eval* Parser::parse_polynomial_evaluation() {
     struct poly_eval* polyEval = new poly_eval;
-    t = peek();
+
     polyEval->polyName = parse_polynomial_name();
-    argVec.clear();
     t = expect(LPAREN);
     parse_argument_list();
     polyEval->args = argVec;
@@ -447,6 +447,7 @@ struct argument* Parser::parse_argument() {
         for(auto & i : polyVec){
             if (i->header->name == t.lexeme){ //F(F(F())); F(X);
                 arg->arg_type = POLYEVAL;
+                lexer.UngetToken(t);
                 arg->polyEval = parse_polynomial_evaluation();
                 break;
             }
@@ -511,7 +512,7 @@ void Parser::execute_program(struct stmt * start){
     exit(1);
 }
 
-
+bool firstEvaluation = true;
 int evaluate_polynomial(struct poly_eval* poly) {
     vector<int> val;
     //vector<int> coefficient;
@@ -526,6 +527,7 @@ int evaluate_polynomial(struct poly_eval* poly) {
                         //cout << "DBUG: " << memory[argVec[j]->var_idx] << endl;
                         val.push_back(memory[argVec[j]->var_idx]);
                     } else {
+                        firstEvaluation = false;
                         val.push_back(evaluate_polynomial(argVec[j]->polyEval));
                     }
                 } else {
@@ -544,7 +546,7 @@ int evaluate_polynomial(struct poly_eval* poly) {
 }
 
 
-bool firstEvaluation = true;
+
 int eval_term(struct term_list* terms, vector<int> val) {
 
     int res = 1;
