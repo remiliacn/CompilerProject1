@@ -193,7 +193,6 @@ Token LexicalAnalyzer::GetToken()
         case '(': tmp.token_type = LPAREN;    return tmp;
         case ')': tmp.token_type = RPAREN;    return tmp;
         case ',': tmp.token_type = COMMA;     return tmp;
-
         default:
             if (isdigit(c)) {
                 input.UngetChar(c);

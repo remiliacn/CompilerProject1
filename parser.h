@@ -7,107 +7,112 @@
 #define __PARSER_H__
 
 #include <string>
+#include <climits>
 #include "lexer.h"
-#include "map"
-#include "vector"
 
-std::vector<std::string> id_list;
-int inputIdx;
+struct poly_decl_struct{
+    struct polynomial_header* header;
+    struct polynomial_body* body;
+};
+
+struct polynomial_header{
+    std::string name;
+    std::vector<struct id_list*> idList;
+
+};
+
+struct polynomial_body{
+    struct term_list* body;
+};
+
+int order = 1;
+struct id_list{
+    std::string name;
+    int order;
+};
 
 struct term_struct{
     int coefficient;
-    std::vector<struct monomial> monoList;
+    std::vector<struct monomial*> mono_list;
 };
 
 struct term_list{
     struct term_struct* term;
-    TokenType op;
+    TokenType addOperator;
     struct term_list* next;
 };
 
 struct monomial{
+    //start with 0.
     int order;
     int exponent;
 };
 
-std::vector<struct monomial> monomial_list;
-
-struct stmt{
-    //stmt_type value
-    //true -> input
-    //false -> poly_eval
-    bool stmt_type;
-    struct poly_eval;
-    int var;
+struct argument{
+    TokenType arg_type;
+    int const_val = INT_MAX;
+    int var_idx;
+    struct poly_eval* polyEval;
 };
-
-std::vector<struct stmt> statement_list;
 
 struct poly_eval{
-    std::string refName;
-    struct args;
+    std::string polyName;
+    std::vector<struct argument*> args;
 };
 
-
-std::vector<struct poly_eval> poly_eval_list;
-
-struct args{
-    TokenType type = {};
-    int var = INT_MAX;
-    int idx = -1;
-    struct poly_eval;
+struct stmt{
+    TokenType stmt_type;
+    int param_idx;
+    int variable;
+    struct poly_eval* poly;
+    struct stmt* next;
 };
 
-std::map<std::string, std::vector<struct args>> argumentMap;
-std::vector<struct args*> argList;
-std::vector<std::string> polyList;
-std::vector<std::string> inputList;
-
-struct Var_struct{
-    std::string name;
-    int val;
-};
-
-struct Poly_struct{
-    std::string name;
-    struct id_list;
-    std::vector<std::string> var;
-
-};
+int eval_term(struct term_list* termList);
+void eval_polynomial();
+struct argument* get_last_arg_struct(struct poly_eval* p);
+//void execute_program(struct stmt * start);
+void assign_num();
+int evaluate_polynomial(struct poly_eval* poly);
+int eval_term(struct term_list* terms, std::vector<int> val);
 
 class Parser {
 private:
     LexicalAnalyzer lexer;
 
-    void syntax_error();
-    Token expect(TokenType expected_type);
-    Token peek();
-    void parse_inputs();
-    void parse_poly_decl();
-    void parse_input();
-    void parse_program();
+    stmt * parse_program();
     void parse_poly_decl_section();
-    void parse_polynomial_header();
+    polynomial_header* parse_polynomial_header();
     void parse_id_list();
     std::string parse_polynomial_name();
-    void parse_polynomial_body();
-    struct term_list* parse_term_list();
-    struct term_struct* parse_term();
-    void parse_monomial_list();
+    polynomial_body * parse_polynomial_body();
+    term_list * parse_term_list();
+    term_struct* parse_term();
+    std::vector<monomial *> parse_monomial_list();
     monomial* parse_monomial();
     int parse_exponent();
     TokenType parse_add_operator();
     int parse_coefficient();
-    void parse_start();
-    void parse_statement_list();
-    void parse_statement();
-    void parse_poly_evaluation_statement();
-    void parse_input_statement();
-    void parse_polynomial_evaluation();
-    void parse_argument_list(std::string varName);
-    args * parse_argument(std::string varName);
-    void execute_program();
+    stmt* parse_start();
+    stmt* parse_statement_list();
+    stmt * parse_statement();
+    stmt * parse_poly_evaluation_statement();
+    stmt * parse_input_statement();
+    poly_eval * parse_polynomial_evaluation();
+    void parse_argument_list();
+    argument * parse_argument();
+    void syntax_error();
+    Token expect(TokenType expected_type);
+    Token peek();
+    void parse_inputs(stmt* st);
+    poly_decl_struct* parse_poly_decl();
+    void execute_program(stmt* st);
+
+public:
+    stmt * parse_input();
+
 };
 
 
 #endif
+

@@ -8,17 +8,15 @@
  *
  */
 #include <iostream>
-#include <cstdint>
-#include <climits>
 #include <cstdlib>
-#include <cmath>
+#include <map>
 #include "parser.h"
-#include <string>
-#include <cstddef>
-#include <algorithm>
-#include <utility>
+#include <vector>
+#include <cmath>
 
 using namespace std;
+Token t;
+
 void Parser::syntax_error()
 {
     cout << "SYNTAX ERROR !!!\n";
@@ -52,203 +50,258 @@ Token Parser::peek()
 
 
 // Parsing
-//vector<struct Var_struct> var;
-vector<struct Poly_struct> poly;
-//vector<struct Term_struct> term;
+int varIdx = 0;
+//save order of params appear after INPUT
+map<string, int> inputMap;
+int memory[100];
+vector<int> inputNum;
+vector<struct argument*> argVec;
+vector<struct id_list*> idVec;
+vector<struct poly_decl_struct*> polyVec;
+vector<struct stmt*> stmtVec;
+vector<monomial*> monoVec;
+vector<int> calcResults;
 
-Token t;
 
-void Parser::parse_input(){
-    parse_program();
-    parse_inputs();
+struct stmt* Parser::parse_input(){
+    struct stmt* st = parse_program();
+    order = 0;
+    parse_inputs(st);
+    return st;
 }
 
-void Parser::parse_program(){
+struct stmt* Parser::parse_program(){
     parse_poly_decl_section();
-    parse_start();
+    struct stmt* st = parse_start();
+    return st;
 }
 
+//append POLY list
 void Parser::parse_poly_decl_section(){
-    parse_poly_decl();
-
-    t = lexer.GetToken();
-
+    poly_decl_struct* newPoly = parse_poly_decl();
+    polyVec.push_back(newPoly);
+    t = peek();
     if(t.token_type == POLY){
         parse_poly_decl_section();
     }
 }
 
-void Parser::parse_poly_decl(){
-    t = lexer.GetToken();
-    if(t.token_type == POLY){
-        parse_polynomial_header();
+//polynomial
+struct poly_decl_struct* Parser::parse_poly_decl(){
+    struct poly_decl_struct* poly = new poly_decl_struct;
+    expect(POLY);
+    poly->header = parse_polynomial_header();
 
-        t = lexer.GetToken();
-        if(t.token_type == EQUAL){
-            parse_polynomial_body();
-            t = lexer.GetToken();
-            if(t.token_type != SEMICOLON){
-                syntax_error();
-            }
-        }
-    }
+    expect(EQUAL);
+    poly->body = parse_polynomial_body();
+    expect(SEMICOLON);
+    return poly;
 }
 
-void Parser::parse_polynomial_body(){
-    parse_term_list();
+//X^2+2x+1
+struct polynomial_body* Parser::parse_polynomial_body(){
+    struct polynomial_body* body = new polynomial_body;
+    body->body = parse_term_list();
+    return body;
 }
 
-void Parser::parse_polynomial_header(){
-    struct Poly_struct newPoly;
-    newPoly.name = parse_polynomial_name();
 
-    t = lexer.GetToken();
+//F, F(X), F(X,Y)
+struct polynomial_header* Parser::parse_polynomial_header(){
+    struct polynomial_header* header = new polynomial_header;
+    //vector<struct id_list*> list;
+    struct id_list* param = new id_list;
+    param->name = "x";
+    param->order = 1;
+    //list.push_back(param);
+    idVec.clear();
+
+
+    header->name = parse_polynomial_name();
+    t = peek();
+    //POLY F(X,Y) = X^2 + Y;
+    //POLY G(X) = X^2+5;
+
     if(t.token_type == LPAREN){
-        id_list.clear();
-        parse_id_list();
-        newPoly.var = id_list;
-
+        free(param);
+        order = 0;
         t = lexer.GetToken();
-        if(t.token_type != RPAREN) {
-            syntax_error();
-        }
+        parse_id_list();
+
+        t = expect(RPAREN);
+
+    }else{
+        idVec.push_back(param);
     }
 
-    poly.push_back(newPoly);
+    header->idList = idVec;
+    return header;
 }
+
 
 void Parser::parse_id_list() {
+    struct id_list* idList = new id_list;
     t = lexer.GetToken();
-    if(t.token_type == ID){
-        id_list.push_back(t.lexeme);
+    if (t.token_type == ID){
+        idList->name = t.lexeme;
+        idList->order = order++;
+
+        idVec.push_back(idList);
+    } else{
+        syntax_error();
+    }
+    t = peek();
+    if(t.token_type == COMMA){
         t = lexer.GetToken();
-        if(t.token_type == COMMA){
-            parse_id_list();
+        parse_id_list();
+    }
+}
+/*
+//parameter list
+//POLY F1 = X^2 + 2;
+struct id_list* Parser::parse_id_list() {
+    struct id_list* head = new id_list;
+    struct id_list* newId ;
+
+    //t = lexer.GetToken();
+    if (t.token_type == ID){
+
+        struct id_list* temp = head;
+        while(temp != nullptr){
+            if(temp->name != t.lexeme){
+                temp = temp->next;
+            } else{
+                break;
+            }
+        }
+
+        if (temp == nullptr){
+            head->name = t.lexeme;
+            head->order = order++;
+            head->next = nullptr;
         }
 
     } else{
         syntax_error();
     }
-}
 
-string Parser::parse_polynomial_name() {
-    t = lexer.GetToken();
-    if(t.token_type != ID){
-        syntax_error();
+    Token temp = peek();
+    if(temp.token_type == COMMA){
+        newId = parse_id_list();
+        head->next = newId;
     }
+    lexer.UngetToken(t);
+    t = lexer.GetToken();
+    return head;
+}
+*/
 
+
+//F,G,K
+string Parser::parse_polynomial_name() {
+    t = expect(ID);
+    //lexer.UngetToken(t);
     return t.lexeme;
 }
 
+//monomials with operator same as body
 struct term_list* Parser::parse_term_list() {
-    auto* termList = new term_list;
+    struct term_list* termList = new term_list;
     struct term_list* newTerm;
-
     termList->term = parse_term();
     t = peek();
     if(t.token_type == PLUS || t.token_type == MINUS) {
-        termList->op = parse_add_operator();
+        termList->addOperator = parse_add_operator();
         newTerm = parse_term_list();
         termList->next = newTerm;
     }
-
     return termList;
 }
 
+//single term like x^2y^2
 struct term_struct* Parser::parse_term() {
-    auto* termInfo = new term_struct;
-    t = peek();
+    struct term_struct* termInfo = new term_struct;
+    t = peek(); //ID POWER NUM
+    //3x, 3 + , 3;
     if(t.token_type == NUM){
-        t = lexer.GetToken();
         termInfo->coefficient = parse_coefficient();
-
-        t = lexer.GetToken();
+        //t = lexer.GetToken();
+        t = peek();
         if(t.token_type == ID) {
-            monomial_list.clear();
-            parse_monomial_list();
-            termInfo->monoList = monomial_list;
+            termInfo->mono_list = parse_monomial_list();
+        } //else{
+        //lexer.UngetToken(t);
+        //}
 
-        }else{
-            termInfo->monoList = {};
-        }
-
-    } else if(t.token_type == ID){
-        t = lexer.GetToken();
-        parse_monomial_list();
+    }else if(t.token_type == ID){
+        termInfo->coefficient = 1;
+        termInfo->mono_list = parse_monomial_list();
 
     }else{
         syntax_error();
     }
-
+    monoVec.clear();
     return termInfo;
 }
 
-void Parser::parse_monomial_list() {
-    monomial_list.clear();
-    t = lexer.GetToken();
+//monomial list
+vector<monomial*> Parser::parse_monomial_list() {
+    struct monomial* newMono;
+    newMono = parse_monomial();
+    monoVec.push_back(newMono);
+    t = peek();
     if(t.token_type == ID) {
-        lexer.UngetToken(t);
-        monomial_list.push_back(*parse_monomial());
+        parse_monomial_list();
     }
+    return monoVec;
 }
 
-monomial* Parser::parse_monomial() {
-    auto *monoInfo = new monomial;
-    int idx = -1;
+//x^2 -> (0,2)
+struct monomial* Parser::parse_monomial() {
+    struct monomial* monoInfo = new monomial;
     t = lexer.GetToken();
     if(t.token_type == ID){
-        id_list.clear();
-        parse_id_list();
-
-        if (!id_list.empty()){
-            for (int i = 0; i < id_list.size(); i++){
-                if (id_list[i] == t.lexeme){
-                    idx = i;
-                    monoInfo->order = i;
-                    break;
-                }
+        //id_list* paramList = parse_id_list();
+        //lexer.UngetToken(t);
+        /*
+        while( paramList != nullptr){
+            if(t.lexeme == paramList->name){
+                monoInfo->order = paramList->order;
+            }
+            paramList = paramList->next;
+        }
+        */
+        for(size_t i = 0; i < idVec.size(); i++){
+            if(idVec[i]->name == t.lexeme){
+                monoInfo->order = idVec[i]->order;
             }
         }
-
-        if (idx != -1){
-            monoInfo->exponent = parse_exponent();
-        } else{
-            syntax_error();
-        }
-
-    } else{
-        syntax_error();
+        //t = lexer.GetToken();
+        monoInfo->exponent = parse_exponent();
     }
-
     return monoInfo;
 }
 
+
 int Parser::parse_exponent() {
     t = lexer.GetToken();
-    int num = INT_MAX;
     if(t.token_type == POWER){
-        t = lexer.GetToken();
-        if(t.token_type == NUM) {
-            num = stoi(t.lexeme);
-
-        } else{
-            syntax_error();
-        }
+        t = expect(NUM);
+        return stoi(t.lexeme);
+    }else{
+        lexer.UngetToken(t);
     }
 
-    return num;
+    return 1;
 }
 
+//poly body operator
 TokenType Parser::parse_add_operator() {
     t = lexer.GetToken();
-    switch(t.token_type){
-        case PLUS:
-        case MINUS:
-            return t.token_type;
-
-        default:
-            syntax_error();
+    if(t.token_type != PLUS && t.token_type != MINUS) {
+        syntax_error();
     }
+    return t.token_type;
 }
 
 int Parser::parse_coefficient() {
@@ -256,177 +309,259 @@ int Parser::parse_coefficient() {
     if(t.token_type != NUM) {
         syntax_error();
     }
-
     return stoi(t.lexeme);
 }
 
-void Parser::parse_start() {
+//START command
+struct stmt* Parser::parse_start() {
+    struct stmt* st;
     t = lexer.GetToken();
     if(t.token_type == START){
+        st = parse_statement_list();
+    }
+    return st;
+}
+
+//input number vector
+size_t tracer = 1;
+size_t counter = 0;
+void Parser::parse_inputs(stmt* st) {
+    t = expect(NUM);
+    string debug = t.lexeme;
+    inputNum.push_back(stoi(t.lexeme));
+    /*
+    for (int i = 0; i < inputMap.size(); i++) {
+        if (stmtVec[i]->variable == INT_MAX) {
+            stmtVec[i]->variable = stoi(t.lexeme);
+            break;
+        }
+    }
+    */
+    t = peek();
+    if(t.token_type == NUM && tracer % polyVec.size() != 0) {
+        tracer++;
+        parse_inputs(st);
+
+    } else if (t.token_type == NUM){
+        execute_program(st);
+    } else{
+
+    }
+}
+/*
+void Parser::parse_statement_list() {
+    t = peek();
+    if(t.token_type == INPUT || t.token_type == ID){
+        stmt* st = parse_statement();
+        stmtVec.push_back(st);
+    }else{
+        syntax_error();
+    }
+    t = peek();
+    if (t.token_type == INPUT || t.token_type == ID){
         parse_statement_list();
     }
 }
+*/
 
-void Parser::parse_inputs() {
-    t = lexer.GetToken();
-
-    if(t.token_type == NUM){
-        int currentInput = stoi(t.lexeme);
-        //while it is not a INPUT X; type.
-        while (!statement_list[inputIdx].stmt_type){
-            inputIdx++;
-        }
-
-        statement_list[inputIdx].var = currentInput;
-        t = lexer.GetToken();
-        if(t.token_type == NUM){
-            parse_inputs();
-        }
-
-    } else{
-        syntax_error();
-    }
-}
-
-void Parser::parse_statement_list() {
-    parse_statement();
-}
-
-void Parser::parse_statement() {
-    Token tok = peek();
-
-    if (tok.token_type == INPUT){
-        parse_input_statement();
-
-    } else if(tok.token_type == ID){
-        parse_poly_evaluation_statement();
-
-    } else{
-        syntax_error();
-    }
-}
-
-void Parser::parse_poly_evaluation_statement() {
-    parse_polynomial_evaluation();
-    t = lexer.GetToken();
-    if(t.token_type == SEMICOLON){
-        syntax_error();
-    }
-}
-
-void Parser::parse_input_statement() {
-    t = lexer.GetToken();
-    auto* st = new stmt;
-    if(t.token_type != INPUT){
-        syntax_error();
-
-    } else{
-        t = lexer.GetToken();
-        if(t.token_type != ID) {
-            syntax_error();
-
-        } else{
-            st->stmt_type = true;
-            st->var = INT_MAX;
-            inputList.push_back(t.lexeme);
-
-            t = lexer.GetToken();
-            if(t.token_type != SEMICOLON){
-                syntax_error();
-            }
-
-            statement_list.push_back(*st);
-        }
-    }
-}
-
-void Parser::parse_polynomial_evaluation() {
-    std::string varName = parse_polynomial_name();
-    auto* st = new stmt;
-
-    polyList.push_back(varName);
-    t = lexer.GetToken();
-    if(t.token_type == LPAREN){
-        st->stmt_type = false;
-        parse_argument_list(varName);
-        t = lexer.GetToken();
-        if(t.token_type != RPAREN){
-            syntax_error();
-        }
-    }
-}
-
-
-void Parser::parse_argument_list(std::string varName) {
+struct stmt* Parser::parse_statement_list() {
+    stmt* st;
     t = peek();
-
-    if (t.token_type == NUM || t.token_type == ID){
-        argList.push_back(parse_argument(varName));
-        t = peek();
-        if (t.token_type == COMMA){
-            parse_argument_list(std::move(varName));
-        }
-
-    } else{
+    if(t.token_type == INPUT || t.token_type == ID){
+        st = parse_statement();
+    }else{
         syntax_error();
+    }
+    t = peek();
+    if (t.token_type == INPUT || t.token_type == ID){
+        st->next = parse_statement_list();
+    }
+    return st;
+}
+
+struct stmt* Parser::parse_statement() {
+    struct stmt* st;
+    t = peek();
+    if(t.token_type == INPUT){
+        st = parse_input_statement();
+    }
+    else{
+        st = parse_poly_evaluation_statement();
+    }
+    return st;
+}
+
+//when input is INPUT X
+struct stmt* Parser::parse_input_statement() {
+    struct stmt* st = new stmt;
+    expect(INPUT);
+    t = expect(ID);
+    st->stmt_type = INPUT;
+    if(inputMap.count(t.lexeme) == 0){
+        inputMap[t.lexeme] = varIdx++;
+        st->variable = INT_MAX;
+        st->param_idx = inputMap[t.lexeme];
+    }
+
+    expect(SEMICOLON);
+    return st;
+}
+
+//when input is F(X)
+struct stmt* Parser::parse_poly_evaluation_statement() {
+    struct stmt* st = new stmt;
+    st->stmt_type = POLYEVAL;
+    st->poly = parse_polynomial_evaluation();
+    expect(SEMICOLON);
+    return st;
+}
+
+
+struct poly_eval* Parser::parse_polynomial_evaluation() {
+    struct poly_eval* polyEval = new poly_eval;
+    polyEval->polyName = parse_polynomial_name();
+    argVec.clear();
+    expect(LPAREN);
+    parse_argument_list();
+    polyEval->args = argVec;
+    expect(RPAREN);
+    return polyEval;
+}
+
+void Parser::parse_argument_list() {
+    argVec.push_back(parse_argument());
+    t = lexer.GetToken();
+    if(t.token_type == COMMA){
+        parse_argument_list();
+    }else{
+        lexer.UngetToken(t);
+
     }
 }
 
-args* Parser::parse_argument(std::string varName) {
+struct argument* Parser::parse_argument() {
+    struct argument* arg = new argument;
     t = lexer.GetToken();
-    auto* arg = new args;
-
-    if (t.token_type == NUM){
-        arg->type = t.token_type;
-        arg->idx = -1;   //place holder declaration.
-        for (int i = 0; i < polyList.size(); i++){
-            if (polyList[i] == varName){
-                arg->idx = i;
+    arg->polyEval = nullptr;
+    if(t.token_type == ID){
+        for(auto & i : polyVec){
+            if (i->header->name == t.lexeme){ //F(F(F())); F(X);
+                arg->arg_type = POLYEVAL;
+                arg->polyEval = parse_polynomial_evaluation();
                 break;
             }
         }
-        arg->var = stoi(t.lexeme);
 
-    } else if(t.token_type == ID){
-        std::string IDName = t.lexeme;
-        //It is another poly.
-        if (find(polyList.begin(), polyList.end(), IDName) != polyList.end()){
-            parse_polynomial_evaluation();
-        } else{
-            arg->type = ID;
-            arg->idx = -1;
-            for (int i = 0; i < inputList.size(); i++){
-                if (inputList[i] == varName){
-                    arg->idx = i;
-                    break;
-                }
-            }
+        if (arg->polyEval == nullptr){
+            arg->arg_type = ID;
+            arg->var_idx = inputMap[t.lexeme];
         }
-    }
 
+    }
+    else if(t.token_type == NUM){
+        arg->arg_type = NUM;
+        arg->const_val = stoi(t.lexeme);
+    } else{
+        syntax_error();
+    }
     return arg;
 }
 
-void execute_program(){
-    for(auto &i : statement_list){
-        switch(i.stmt_type){
-            case true: //a input
+
+void Parser::execute_program(struct stmt * start){
+    struct stmt* ptr;
+    int result;
+    //assign_num();
+    ptr = start;
+    while(ptr != nullptr){
+        switch (ptr->stmt_type) {
+            case POLYEVAL:
+                result = evaluate_polynomial(ptr->poly);
+                cout << result << endl;
+                counter = 0;
+                parse_inputs(ptr);
+                break;
+            case INPUT:
+                memory[ptr->param_idx] = inputNum[counter];
+                counter++;
+                break;
+        }
+        ptr = ptr->next;
+    }
+}
+
+
+int evaluate_polynomial(struct poly_eval* poly) {
+    vector<int> val;
+    //vector<int> coefficient;
+    vector<int> exponents;
+    argVec = poly->args;
+    int res = 1;
+    for (size_t i = 0; i < polyVec.size(); i++) {
+        if (polyVec[i]->header->name == poly->polyName) {
+            for (size_t j = 0; j < argVec.size(); j++) {
+                if (argVec[j]->const_val == INT_MAX) {
+                    if (argVec[j]->polyEval == nullptr) {
+                        cout << "DBUG: " << memory[argVec[j]->var_idx] << endl;
+                        val.push_back(memory[argVec[j]->var_idx]);
+                    } else {
+                        val.push_back(evaluate_polynomial(argVec[j]->polyEval));
+                    }
+                } else {
+                    val.push_back(argVec[j]->const_val);
+                }
+            }
+
+            term_list* terms = polyVec[i]->body->body;
+            res = eval_term(terms, val);
+            val.clear();
 
         }
     }
+    return res;
+}
+
+size_t valueIdx = 0;
+vector<int> evalResult;
+int eval_term(struct term_list* terms, vector<int> val) {
+    int res = 0;
+    //coefficient.push_back(polyVec[i]->body->body->term->coefficient);
+    //M^6 + 3 N - N^2 + 71;
+    int coefficient = terms->term->coefficient;
+    monoVec = terms->term->mono_list;
+    if (!monoVec.empty()){
+        for(size_t k = 0; k < monoVec.size(); k++){
+            int exponent = terms->term->mono_list[k]->exponent;
+            int order = monoVec[k]->order;
+            int value = val[order + valueIdx];
+            res *= pow(value, exponent);
+        }
+    }
+
+    res *= coefficient;
+
+    switch(terms->addOperator){
+        case PLUS:
+            evalResult.push_back(res);
+            break;
+
+        case MINUS:
+            evalResult.push_back(res * -1);
+            break;
+    }
+
+    for(auto &i : evalResult){
+        res += i;
+    }
+
+    valueIdx++;
+    return res;
 }
 
 
 int main()
 {
-    LexicalAnalyzer lexer;
-    Token token;
-
-    token = lexer.GetToken();
-    token.Print();
-    while (token.token_type != END_OF_FILE)
-    {
-        token = lexer.GetToken();
-        token.Print();
-    }
+    Parser parser;
+    parser.parse_input();
+    return 0;
 }

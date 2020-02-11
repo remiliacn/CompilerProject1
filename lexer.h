@@ -14,7 +14,7 @@
 // ------- token types -------------------
 
 typedef enum { END_OF_FILE = 0,
-    POLY, START, INPUT, EQUAL, LPAREN,
+    POLY, START, INPUT, POLYEVAL, EQUAL, LPAREN,
     RPAREN, ID, COMMA, POWER, NUM,
     PLUS, MINUS, SEMICOLON, ERROR
     } TokenType;
