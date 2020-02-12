@@ -16,7 +16,6 @@
 #include <algorithm>
 
 using namespace std;
-Token t;
 
 void Parser::syntax_error()
 {
@@ -53,19 +52,15 @@ struct error_struct{
     vector<int> errorLine;
 };
 
-
-// Parsing
+Token t;
 int varIdx = 0;
-//save order of params appear after INPUT
 map<string, int> inputMap;
 int memory[100];
 vector<int> inputNum;
 vector<struct argument*> argVec;
 vector<struct id_list*> idVec;
 vector<struct poly_decl_struct*> polyVec;
-vector<struct stmt*> stmtVec;
 vector<monomial*> monoVec;
-vector<int> calcResults;
 struct error_struct error;
 
 
@@ -82,7 +77,6 @@ struct stmt* Parser::parse_program(){
     return st;
 }
 
-//append POLY list
 void Parser::parse_poly_decl_section(){
     poly_decl_struct* newPoly = parse_poly_decl();
     if (!polyVec.empty()){
@@ -105,9 +99,8 @@ void Parser::parse_poly_decl_section(){
     }
 }
 
-//polynomial
 struct poly_decl_struct* Parser::parse_poly_decl(){
-    struct poly_decl_struct* poly = new poly_decl_struct;
+    auto* poly = new poly_decl_struct;
     expect(POLY);
     poly->header = parse_polynomial_header();
 
@@ -117,22 +110,17 @@ struct poly_decl_struct* Parser::parse_poly_decl(){
     return poly;
 }
 
-//X^2+2x+1
 struct polynomial_body* Parser::parse_polynomial_body(){
-    struct polynomial_body* body = new polynomial_body;
+    auto* body = new polynomial_body;
     body->body = parse_term_list();
     return body;
 }
 
-
-//F, F(X), F(X,Y)
 struct polynomial_header* Parser::parse_polynomial_header(){
-    struct polynomial_header* header = new polynomial_header;
-    //vector<struct id_list*> list;
-    struct id_list* param = new id_list;
+    auto* header = new polynomial_header;
+    auto* param = new id_list;
     param->name = "x";
     param->order = 0;
-    //list.push_back(param);
     idVec.clear();
 
 
@@ -160,7 +148,7 @@ struct polynomial_header* Parser::parse_polynomial_header(){
 
 
 void Parser::parse_id_list() {
-    struct id_list* idList = new id_list;
+    auto* idList = new id_list;
     t = lexer.GetToken();
     if (t.token_type == ID){
         idList->name = t.lexeme;
@@ -176,57 +164,15 @@ void Parser::parse_id_list() {
         parse_id_list();
     }
 }
-/*
-//parameter list
-//POLY F1 = X^2 + 2;
-struct id_list* Parser::parse_id_list() {
-    struct id_list* head = new id_list;
-    struct id_list* newId ;
 
-    //t = lexer.GetToken();
-    if (t.token_type == ID){
-
-        struct id_list* temp = head;
-        while(temp != nullptr){
-            if(temp->name != t.lexeme){
-                temp = temp->next;
-            } else{
-                break;
-            }
-        }
-
-        if (temp == nullptr){
-            head->name = t.lexeme;
-            head->order = order++;
-            head->next = nullptr;
-        }
-
-    } else{
-        syntax_error();
-    }
-
-    Token temp = peek();
-    if(temp.token_type == COMMA){
-        newId = parse_id_list();
-        head->next = newId;
-    }
-    lexer.UngetToken(t);
-    t = lexer.GetToken();
-    return head;
-}
-*/
-
-
-//F,G,K
 string Parser::parse_polynomial_name() {
     t = expect(ID);
-    //lexer.UngetToken(t);
     return t.lexeme;
 }
 
-//monomials with operator same as body
+
 struct term_list* Parser::parse_term_list() {
-    struct term_list* termList = new term_list;
+    auto* termList = new term_list;
     struct term_list* newTerm;
     termList->term = parse_term();
     t = peek();
@@ -238,20 +184,16 @@ struct term_list* Parser::parse_term_list() {
     return termList;
 }
 
-//single term like x^2y^2
+
 struct term_struct* Parser::parse_term() {
-    struct term_struct* termInfo = new term_struct;
-    t = peek(); //ID POWER NUM
-    //3x, 3 + , 3;
+    auto* termInfo = new term_struct;
+    t = peek();
     if(t.token_type == NUM){
         termInfo->coefficient = parse_coefficient();
-        //t = lexer.GetToken();
         t = peek();
         if(t.token_type == ID) {
             termInfo->mono_list = parse_monomial_list();
-        } //else{
-        //lexer.UngetToken(t);
-        //}
+        }
 
     }else if(t.token_type == ID){
         termInfo->coefficient = 1;
@@ -278,7 +220,7 @@ vector<monomial*> Parser::parse_monomial_list() {
 
 //x^2 -> (0,2)
 struct monomial* Parser::parse_monomial() {
-    struct monomial* monoInfo = new monomial;
+    auto* monoInfo = new monomial;
     t = lexer.GetToken();
     monoInfo->order = INT_MIN;
     if(t.token_type == ID){
@@ -293,9 +235,9 @@ struct monomial* Parser::parse_monomial() {
         }
         */
         //size_t errorCheck = 0;
-        for(size_t i = 0; i < idVec.size(); i++){
-            if(idVec[i]->name == t.lexeme){
-                monoInfo->order = idVec[i]->order;
+        for(auto & i : idVec){
+            if(i->name == t.lexeme){
+                monoInfo->order = i->order;
                 break;
             }
         }
@@ -367,9 +309,6 @@ void Parser::parse_inputs(stmt* st) {
             execute_program(st);
         }
 
-    } else if (t.token_type == NUM){
-        execute_program(st);
-
     } else if (t.token_type == END_OF_FILE){
         execute_program(st);
     } else{
@@ -421,7 +360,7 @@ struct stmt* Parser::parse_statement() {
 
 //when input is INPUT X
 struct stmt* Parser::parse_input_statement() {
-    struct stmt* st = new stmt;
+    auto* st = new stmt;
     expect(INPUT);
     t = expect(ID);
     st->stmt_type = INPUT;
@@ -439,9 +378,8 @@ struct stmt* Parser::parse_input_statement() {
     return st;
 }
 
-//when input is F(X)
 struct stmt* Parser::parse_poly_evaluation_statement() {
-    struct stmt* st = new stmt;
+    auto* st = new stmt;
     st->stmt_type = POLYEVAL;
     st->poly = parse_polynomial_evaluation();
     expect(SEMICOLON);
@@ -451,7 +389,7 @@ struct stmt* Parser::parse_poly_evaluation_statement() {
 
 
 struct poly_eval* Parser::parse_polynomial_evaluation() {
-    struct poly_eval* polyEval = new poly_eval;
+    auto* polyEval = new poly_eval;
     vector<struct id_list*> idList;
 
     polyEval->polyName = parse_polynomial_name();
@@ -504,12 +442,12 @@ void Parser::parse_argument_list() {
 }
 
 struct argument* Parser::parse_argument() {
-    struct argument* arg = new argument;
+    auto* arg = new argument;
     t = lexer.GetToken();
     arg->polyEval = nullptr;
     if(t.token_type == ID){
         for(auto & i : polyVec){
-            if (i->header->name == t.lexeme){ //F(F(F())); F(X);
+            if (i->header->name == t.lexeme){
                 arg->arg_type = POLYEVAL;
                 lexer.UngetToken(t);
                 arg->polyEval = parse_polynomial_evaluation();
@@ -524,10 +462,6 @@ struct argument* Parser::parse_argument() {
 
             } else{
                 error.errorCode = 3;
-                /*if (find(error.errorLine.begin(), error.errorLine.end(), t.line_no) == error.errorLine.end()){
-                    error.errorLine.push_back(t.line_no);
-                }*/
-
                 lexer.UngetToken(t);
                 parse_polynomial_evaluation();
             }
@@ -547,7 +481,6 @@ vector<int> evalTerm;
 void Parser::execute_program(struct stmt * start){
     struct stmt* ptr;
     int result;
-    //assign_num();
     ptr = start;
     try{
         if (error.errorCode != 0){
@@ -573,7 +506,6 @@ void Parser::execute_program(struct stmt * start){
                         }
 
                         cout << result << endl;
-                        //counter = 0;
                         evalTerm.clear();
                         break;
 
@@ -584,6 +516,9 @@ void Parser::execute_program(struct stmt * start){
 
                         memory[ptr->param_idx] = inputNum[counter];
                         counter++;
+                        break;
+
+                    default:
                         break;
                 }
 
@@ -605,23 +540,23 @@ int evaluate_polynomial(struct poly_eval* poly) {
     vector<int> exponents;
     argVec = poly->args;
     int res = 1;
-    for (size_t i = 0; i < polyVec.size(); i++) {
-        if (polyVec[i]->header->name == poly->polyName) {
-            for (size_t j = 0; j < argVec.size(); j++) {
-                if (argVec[j]->const_val == INT_MAX) {
-                    if (argVec[j]->polyEval == nullptr) {
+    for (auto & i : polyVec) {
+        if (i->header->name == poly->polyName) {
+            for (auto & j : argVec) {
+                if (j->const_val == INT_MAX) {
+                    if (j->polyEval == nullptr) {
                         //cout << "DBUG: " << memory[argVec[j]->var_idx] << endl;
-                        val.push_back(memory[argVec[j]->var_idx]);
+                        val.push_back(memory[j->var_idx]);
                     } else {
                         firstEvaluation = false;
-                        val.push_back(evaluate_polynomial(argVec[j]->polyEval));
+                        val.push_back(evaluate_polynomial(j->polyEval));
                     }
                 } else {
-                    val.push_back(argVec[j]->const_val);
+                    val.push_back(j->const_val);
                 }
             }
 
-            term_list* terms = polyVec[i]->body->body;
+            term_list* terms = i->body->body;
             res = eval_term(terms, val);
             val.clear();
             break;
@@ -644,7 +579,7 @@ int eval_term(struct term_list* terms, vector<int> val) {
         for(size_t k = 0; k < monoVec.size(); k++){
             int exponent = terms->term->mono_list[k]->exponent;
             int orderDebug = monoVec[k]->order;
-            int value = val[monoVec[k]->order];
+            int value = val[orderDebug];
             res *= pow(value, exponent);
         }
     }
@@ -662,6 +597,9 @@ int eval_term(struct term_list* terms, vector<int> val) {
         case MINUS:
             evalTerm.push_back(eval_term(terms->next, val) * -1);
             break;
+        default:
+            //This should not happen.
+            exit(1);
     }
 
     firstEvaluation = true;
