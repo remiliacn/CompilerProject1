@@ -18,6 +18,7 @@ struct poly_decl_struct{
 struct polynomial_header{
     std::string name;
     std::vector<struct id_list*> idList;
+    int decl_line;
 
 };
 

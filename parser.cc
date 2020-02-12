@@ -13,6 +13,7 @@
 #include "parser.h"
 #include <vector>
 #include <cmath>
+#include <algorithm>
 
 using namespace std;
 Token t;
@@ -47,6 +48,10 @@ Token Parser::peek()
     return t;
 }
 
+struct error_struct{
+    int errorCode = 0;
+    vector<int> errorLine;
+};
 
 
 // Parsing
@@ -61,6 +66,7 @@ vector<struct poly_decl_struct*> polyVec;
 vector<struct stmt*> stmtVec;
 vector<monomial*> monoVec;
 vector<int> calcResults;
+struct error_struct error;
 
 
 struct stmt* Parser::parse_input(){
@@ -79,6 +85,19 @@ struct stmt* Parser::parse_program(){
 //append POLY list
 void Parser::parse_poly_decl_section(){
     poly_decl_struct* newPoly = parse_poly_decl();
+    if (!polyVec.empty()){
+        for (auto &i : polyVec){
+            if (newPoly->header->name == i->header->name){
+                error.errorCode = 1;
+                if (find(error.errorLine.begin(), error.errorLine.end(), i->header->decl_line) == error.errorLine.end()){
+                    error.errorLine.push_back(i->header->decl_line);
+                }
+                if (find(error.errorLine.begin(), error.errorLine.end(), newPoly->header->decl_line) == error.errorLine.end()) {
+                    error.errorLine.push_back(newPoly->header->decl_line);
+                }
+            }
+        }
+    }
     polyVec.push_back(newPoly);
     t = peek();
     if(t.token_type == POLY){
@@ -118,6 +137,7 @@ struct polynomial_header* Parser::parse_polynomial_header(){
 
 
     header->name = parse_polynomial_name();
+    header->decl_line = t.line_no;
     t = peek();
     //POLY F(X,Y) = X^2 + Y;
     //POLY G(X) = X^2+5;
@@ -260,6 +280,7 @@ vector<monomial*> Parser::parse_monomial_list() {
 struct monomial* Parser::parse_monomial() {
     struct monomial* monoInfo = new monomial;
     t = lexer.GetToken();
+    monoInfo->order = INT_MIN;
     if(t.token_type == ID){
         //id_list* paramList = parse_id_list();
         //lexer.UngetToken(t);
@@ -271,10 +292,17 @@ struct monomial* Parser::parse_monomial() {
             paramList = paramList->next;
         }
         */
+        //size_t errorCheck = 0;
         for(size_t i = 0; i < idVec.size(); i++){
             if(idVec[i]->name == t.lexeme){
                 monoInfo->order = idVec[i]->order;
+                break;
             }
+        }
+
+        if (monoInfo->order == INT_MIN){
+            error.errorCode = 2;
+            error.errorLine.push_back(t.line_no);
         }
         //t = lexer.GetToken();
         monoInfo->exponent = parse_exponent();
@@ -342,6 +370,10 @@ void Parser::parse_inputs(stmt* st) {
     } else if (t.token_type == NUM){
         execute_program(st);
 
+    } else if (t.token_type == END_OF_FILE){
+        execute_program(st);
+    } else{
+        syntax_error();
     }
 }
 /*
@@ -455,7 +487,9 @@ struct argument* Parser::parse_argument() {
 
         if (arg->polyEval == nullptr){
             arg->arg_type = ID;
-            arg->var_idx = inputMap[t.lexeme];
+            if (inputMap.count(t.lexeme) == 1){
+                arg->var_idx = inputMap[t.lexeme];
+            }
         }
 
     }
@@ -475,36 +509,47 @@ void Parser::execute_program(struct stmt * start){
     //assign_num();
     ptr = start;
     try{
-        while(ptr != nullptr){
-            switch (ptr->stmt_type) {
-                case POLYEVAL:
-                    result = 0;
-                    evaluate_polynomial(ptr->poly);
-                    if (evalTerm.empty()){
-                        cout << "something went huang." << endl;
-                    }
-
-                    for (auto &i : evalTerm){
-                        result += i;
-                    }
-
-                    cout << result << endl;
-                    //counter = 0;
-                    evalTerm.clear();
-                    break;
-
-                case INPUT:
-                    if (counter >= inputNum.size()){
-                        parse_inputs(ptr);
-                    }
-
-                    memory[ptr->param_idx] = inputNum[counter];
-                    counter++;
-                    break;
+        if (error.errorCode != 0){
+            printf("Error Code %d: ", error.errorCode);
+            sort(error.errorLine.begin(), error.errorLine.end());
+            for (int i : error.errorLine){
+                printf("%d ", i);
             }
 
-            ptr = ptr->next;
+            exit(1);
+        } else{
+            while(ptr != nullptr){
+                switch (ptr->stmt_type) {
+                    case POLYEVAL:
+                        result = 0;
+                        evaluate_polynomial(ptr->poly);
+                        if (evalTerm.empty()){
+                            cout << "something went huang." << endl;
+                        }
+
+                        for (auto &i : evalTerm){
+                            result += i;
+                        }
+
+                        cout << result << endl;
+                        //counter = 0;
+                        evalTerm.clear();
+                        break;
+
+                    case INPUT:
+                        if (counter >= inputNum.size()){
+                            parse_inputs(ptr);
+                        }
+
+                        memory[ptr->param_idx] = inputNum[counter];
+                        counter++;
+                        break;
+                }
+
+                ptr = ptr->next;
+            }
         }
+
     } catch (exception &){
 
     }
