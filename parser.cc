@@ -491,6 +491,7 @@ struct argument* Parser::parse_argument() {
             t = lexer.GetToken();
             if (inputMap.count(t.lexeme) == 1) {
                 arg->var_idx = inputMap[t.lexeme];
+                arg->varName = t.lexeme;
 
             } else {
                 error.errorCode = 5;
@@ -581,7 +582,13 @@ int evaluate_polynomial(struct poly_eval* poly) {
                 if (j->const_val == INT_MAX) {
                     if (j->polyEval == nullptr) {
                         //cout << "DBUG: " << memory[argVec[j]->var_idx] << endl;
-                        val.push_back(memory[j->var_idx]);
+
+                        if (inputMap.count(j->varName) == 1){
+                            val.push_back(memory[inputMap[j->varName]]);
+                        } else{
+                            val.push_back(memory[j->var_idx]);
+                        }
+
                         if (recursive > 0){
                             term_list* terms = i->body->body;
                             eval_term(terms, val);
@@ -589,14 +596,13 @@ int evaluate_polynomial(struct poly_eval* poly) {
                             for (auto &i : evalTerm){
                                 result += i;
                             }
-                            memory[j->var_idx] = result;
+                            //memory[j->var_idx] = result;
                             evalTerm.clear();
                             recursive--;
                         }
 
                     } else {
                         try{
-                            isPoly = false;
                             recursive ++;
                             val.push_back(evaluate_polynomial(j->polyEval));
                         } catch (exception &err){

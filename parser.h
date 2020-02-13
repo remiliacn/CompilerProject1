@@ -53,6 +53,7 @@ struct monomial{
 struct argument{
     TokenType arg_type;
     int const_val = INT_MAX;
+    std::string varName;
     int var_idx;
     struct poly_eval* polyEval;
 };
