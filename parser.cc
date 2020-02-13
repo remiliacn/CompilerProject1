@@ -96,6 +96,10 @@ void Parser::parse_poly_decl_section(){
     t = peek();
     if(t.token_type == POLY){
         parse_poly_decl_section();
+    } else if (t.token_type == START){
+        return;
+    } else{
+        syntax_error();
     }
 }
 
@@ -158,6 +162,7 @@ void Parser::parse_id_list() {
     } else{
         syntax_error();
     }
+
     t = peek();
     if(t.token_type == COMMA){
         t = lexer.GetToken();
@@ -195,7 +200,7 @@ struct term_struct* Parser::parse_term() {
             termInfo->mono_list = parse_monomial_list();
         }
 
-    }else if(t.token_type == ID){
+    } else if(t.token_type == ID){
         termInfo->coefficient = 1;
         termInfo->mono_list = parse_monomial_list();
 
@@ -224,17 +229,6 @@ struct monomial* Parser::parse_monomial() {
     t = lexer.GetToken();
     monoInfo->order = INT_MIN;
     if(t.token_type == ID){
-        //id_list* paramList = parse_id_list();
-        //lexer.UngetToken(t);
-        /*
-        while( paramList != nullptr){
-            if(t.lexeme == paramList->name){
-                monoInfo->order = paramList->order;
-            }
-            paramList = paramList->next;
-        }
-        */
-        //size_t errorCheck = 0;
         for(auto & i : idVec){
             if(i->name == t.lexeme){
                 monoInfo->order = i->order;
@@ -246,9 +240,12 @@ struct monomial* Parser::parse_monomial() {
             error.errorCode = 2;
             error.errorLine.push_back(t.line_no);
         }
-        //t = lexer.GetToken();
         monoInfo->exponent = parse_exponent();
+
+    } else{
+        syntax_error();
     }
+
     return monoInfo;
 }
 
@@ -258,6 +255,7 @@ int Parser::parse_exponent() {
     if(t.token_type == POWER){
         t = expect(NUM);
         return stoi(t.lexeme);
+
     }else{
         lexer.UngetToken(t);
     }
@@ -298,7 +296,14 @@ struct stmt* Parser::parse_start() {
 size_t tracer = 1;
 size_t counter = 0;
 void Parser::parse_inputs(stmt* st) {
-    t = expect(NUM);
+    //t = expect(NUM);
+    t = lexer.GetToken();
+    if (t.token_type == END_OF_FILE && tracer == 1){
+        syntax_error();
+    } else if (t.token_type != NUM){
+        syntax_error();
+    }
+
     string debug = t.lexeme;
     inputNum.push_back(stoi(t.lexeme));
 
@@ -394,7 +399,6 @@ struct stmt* Parser::parse_poly_evaluation_statement() {
     return st;
 }
 
-
 struct poly_eval* Parser::parse_polynomial_evaluation() {
     auto* polyEval = new poly_eval;
     vector<struct id_list*> idList;
@@ -443,10 +447,11 @@ void Parser::parse_argument_list() {
     t = lexer.GetToken();
     if(t.token_type == COMMA){
         parse_argument_list();
-    }else{
+    } else{
         lexer.UngetToken(t);
     }
 }
+
 
 struct argument* Parser::parse_argument() {
     auto* arg = new argument;
@@ -468,19 +473,22 @@ struct argument* Parser::parse_argument() {
                 arg->var_idx = inputMap[t.lexeme];
 
             } else{
-                error.errorCode = 3;
+                error.errorCode = 5;
+                error.errorLine.push_back(t.line_no);
                 //lexer.UngetToken(t);
-                parse_polynomial_evaluation();
+                arg->var_idx = INT_MAX;
+                return arg;
             }
         }
 
-    }
-    else if(t.token_type == NUM){
+    } else if(t.token_type == NUM){
         arg->arg_type = NUM;
         arg->const_val = stoi(t.lexeme);
+
     } else{
         syntax_error();
     }
+
     return arg;
 }
 
