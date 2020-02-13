@@ -310,7 +310,11 @@ void Parser::parse_inputs(stmt* st) {
     if(t.token_type == NUM) {
         parse_inputs(st);
 
-    } else if (t.token_type == END_OF_FILE){
+    } else if (t.token_type == START){
+        execute_program(st);
+    }
+
+    else if (t.token_type == END_OF_FILE){
         try{
             execute_program(st);
         } catch (exception &err){
@@ -467,11 +471,12 @@ struct poly_eval* Parser::parse_argument_list() {
     return temp;
 }
 
-
+int idx_test = 0;
 struct argument* Parser::parse_argument() {
     auto* arg = new argument;
     t = lexer.GetToken();
     arg->polyEval = nullptr;
+    idx_test++;
     if(t.token_type == ID){
         Token temp = lexer.GetToken();
         lexer.UngetToken(temp);
@@ -498,6 +503,7 @@ struct argument* Parser::parse_argument() {
     } else if(t.token_type == NUM){
         arg->arg_type = NUM;
         arg->const_val = stoi(t.lexeme);
+        arg->var_idx = idx_test;
 
     } else{
         syntax_error();
@@ -526,19 +532,10 @@ void Parser::execute_program(struct stmt * start){
             while(ptr != nullptr){
                 switch (ptr->stmt_type) {
                     case POLYEVAL:
-                        result = 0;
                         try{
-                            evaluate_polynomial(ptr->poly);
+                            result = evaluate_polynomial(ptr->poly);
                         } catch (exception &Err){
                             exit(1);
-                        }
-
-                        if (evalTerm.empty()){
-                            cout << "something went huang." << endl;
-                        }
-
-                        for (auto &i : evalTerm){
-                            result += i;
                         }
 
                         cout << result << endl;
@@ -569,14 +566,15 @@ void Parser::execute_program(struct stmt * start){
     exit(1);
 }
 
-bool firstEvaluation = true;
+bool isPoly = true;
+int recursive = 0;
 int evaluate_polynomial(struct poly_eval* poly) {
     vector<int> val;
     //vector<int> coefficient;
     vector<int> exponents;
     vector<struct argument*> argVec;
     argVec = poly->args;
-    int res = 1;
+    int res = 0;
     for (auto & i : polyVec) {
         if (i->header->name == poly->polyName) {
             for (auto & j : argVec) {
@@ -584,9 +582,22 @@ int evaluate_polynomial(struct poly_eval* poly) {
                     if (j->polyEval == nullptr) {
                         //cout << "DBUG: " << memory[argVec[j]->var_idx] << endl;
                         val.push_back(memory[j->var_idx]);
+                        if (recursive > 0){
+                            term_list* terms = i->body->body;
+                            eval_term(terms, val);
+                            int result = 0;
+                            for (auto &i : evalTerm){
+                                result += i;
+                            }
+                            memory[j->var_idx] = result;
+                            evalTerm.clear();
+                            recursive--;
+                        }
+
                     } else {
-                        firstEvaluation = false;
                         try{
+                            isPoly = false;
+                            recursive ++;
                             val.push_back(evaluate_polynomial(j->polyEval));
                         } catch (exception &err){
                             exit(1);
@@ -594,22 +605,29 @@ int evaluate_polynomial(struct poly_eval* poly) {
 
                     }
                 } else {
+                    int constant = j->const_val;
+                    int currentIdxForConst = j->var_idx;
                     val.push_back(j->const_val);
                 }
             }
 
             term_list* terms = i->body->body;
             try{
-                res = eval_term(terms, val);
+                eval_term(terms, val);
+                for (auto &i : evalTerm){
+                    res += i;
+                }
+                evalTerm.clear();
             } catch (exception &err){
                 exit(1);
             }
 
-            val.clear();
+
             break;
         }
     }
 
+    recursive = false;
     return res;
 }
 
@@ -628,11 +646,11 @@ int eval_term(struct term_list* terms, vector<int> val) {
     }
 
     res *= coefficient;
-    if (firstEvaluation){
+    if (isPoly){
         evalTerm.push_back(res);
     }
 
-    firstEvaluation = false;
+    isPoly = false;
     switch(terms->addOperator){
         case PLUS:
             try{
@@ -651,7 +669,7 @@ int eval_term(struct term_list* terms, vector<int> val) {
             break;
     }
 
-    firstEvaluation = true;
+    isPoly = true;
     return res;
 }
 
