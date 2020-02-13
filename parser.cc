@@ -138,7 +138,7 @@ struct polynomial_header* Parser::parse_polynomial_header(){
 
         t = expect(RPAREN);
 
-    }else{
+    } else if (t.token_type == EQUAL){
         idVec.push_back(param);
     }
 
@@ -288,6 +288,8 @@ struct stmt* Parser::parse_start() {
     t = lexer.GetToken();
     if(t.token_type == START){
         st = parse_statement_list();
+    } else{
+        syntax_error();
     }
     return st;
 }
@@ -339,9 +341,14 @@ struct stmt* Parser::parse_statement_list() {
     }else{
         syntax_error();
     }
+
     t = peek();
     if (t.token_type == INPUT || t.token_type == ID){
         st->next = parse_statement_list();
+    } else if (t.token_type == NUM){
+        return st;
+    } else{
+        syntax_error();
     }
     return st;
 }
@@ -446,23 +453,23 @@ struct argument* Parser::parse_argument() {
     t = lexer.GetToken();
     arg->polyEval = nullptr;
     if(t.token_type == ID){
-        for(auto & i : polyVec){
-            if (i->header->name == t.lexeme){
-                arg->arg_type = POLYEVAL;
-                lexer.UngetToken(t);
-                arg->polyEval = parse_polynomial_evaluation();
-                break;
-            }
-        }
+        Token temp = lexer.GetToken();
+        lexer.UngetToken(temp);
+        lexer.UngetToken(t);
+        if (temp.token_type == LPAREN){
+            arg->arg_type = POLYEVAL;
+            //lexer.UngetToken(t);
+            arg->polyEval = parse_polynomial_evaluation();
 
-        if (arg->polyEval == nullptr){
+        } else{
             arg->arg_type = ID;
+            t = lexer.GetToken();
             if (inputMap.count(t.lexeme) == 1){
                 arg->var_idx = inputMap[t.lexeme];
 
             } else{
                 error.errorCode = 3;
-                lexer.UngetToken(t);
+                //lexer.UngetToken(t);
                 parse_polynomial_evaluation();
             }
         }
@@ -491,6 +498,7 @@ void Parser::execute_program(struct stmt * start){
             }
 
             exit(1);
+
         } else{
             while(ptr != nullptr){
                 switch (ptr->stmt_type) {
@@ -597,9 +605,6 @@ int eval_term(struct term_list* terms, vector<int> val) {
         case MINUS:
             evalTerm.push_back(eval_term(terms->next, val) * -1);
             break;
-        default:
-            //This should not happen.
-            exit(1);
     }
 
     firstEvaluation = true;
