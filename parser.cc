@@ -144,6 +144,8 @@ struct polynomial_header* Parser::parse_polynomial_header(){
 
     } else if (t.token_type == EQUAL){
         idVec.push_back(param);
+    } else if (t.token_type != EQUAL){
+        syntax_error();
     }
 
     header->idList = idVec;
@@ -185,6 +187,8 @@ struct term_list* Parser::parse_term_list() {
         termList->addOperator = parse_add_operator();
         newTerm = parse_term_list();
         termList->next = newTerm;
+    } else if (t.token_type != SEMICOLON){
+        syntax_error();
     }
     return termList;
 }
@@ -313,11 +317,21 @@ void Parser::parse_inputs(stmt* st) {
         if (tracer % polyVec.size() != 0){
             parse_inputs(st);
         } else{
-            execute_program(st);
+            try{
+                execute_program(st);
+            } catch(exception &err){
+                exit(1);
+            }
+
         }
 
     } else if (t.token_type == END_OF_FILE){
-        execute_program(st);
+        try{
+            execute_program(st);
+        } catch (exception &err){
+            exit(1);
+        }
+
     } else{
         syntax_error();
     }
@@ -355,6 +369,7 @@ struct stmt* Parser::parse_statement_list() {
     } else{
         syntax_error();
     }
+
     return st;
 }
 
@@ -363,9 +378,10 @@ struct stmt* Parser::parse_statement() {
     t = peek();
     if(t.token_type == INPUT){
         st = parse_input_statement();
-    }
-    else{
+    } else if (t.token_type == ID){
         st = parse_poly_evaluation_statement();
+    } else{
+        syntax_error();
     }
     return st;
 }
@@ -466,7 +482,7 @@ struct argument* Parser::parse_argument() {
             //lexer.UngetToken(t);
             arg->polyEval = parse_polynomial_evaluation();
 
-        } else{
+        } else if (temp.token_type != LPAREN && t.token_type == ID){
             arg->arg_type = ID;
             t = lexer.GetToken();
             if (inputMap.count(t.lexeme) == 1){
@@ -479,6 +495,8 @@ struct argument* Parser::parse_argument() {
                 arg->var_idx = INT_MAX;
                 return arg;
             }
+        } else{
+            syntax_error();
         }
 
     } else if(t.token_type == NUM){
@@ -512,7 +530,12 @@ void Parser::execute_program(struct stmt * start){
                 switch (ptr->stmt_type) {
                     case POLYEVAL:
                         result = 0;
-                        evaluate_polynomial(ptr->poly);
+                        try{
+                            evaluate_polynomial(ptr->poly);
+                        } catch (exception &Err){
+                            exit(1);
+                        }
+
                         if (evalTerm.empty()){
                             cout << "something went huang." << endl;
                         }
@@ -565,7 +588,12 @@ int evaluate_polynomial(struct poly_eval* poly) {
                         val.push_back(memory[j->var_idx]);
                     } else {
                         firstEvaluation = false;
-                        val.push_back(evaluate_polynomial(j->polyEval));
+                        try{
+                            val.push_back(evaluate_polynomial(j->polyEval));
+                        } catch (exception &err){
+
+                        }
+
                     }
                 } else {
                     val.push_back(j->const_val);
@@ -573,7 +601,12 @@ int evaluate_polynomial(struct poly_eval* poly) {
             }
 
             term_list* terms = i->body->body;
-            res = eval_term(terms, val);
+            try{
+                res = eval_term(terms, val);
+            } catch (exception &err){
+                exit(1);
+            }
+
             val.clear();
             break;
         }
@@ -581,8 +614,6 @@ int evaluate_polynomial(struct poly_eval* poly) {
 
     return res;
 }
-
-
 
 int eval_term(struct term_list* terms, vector<int> val) {
 
@@ -608,10 +639,19 @@ int eval_term(struct term_list* terms, vector<int> val) {
     firstEvaluation = false;
     switch(terms->addOperator){
         case PLUS:
-            evalTerm.push_back(eval_term(terms->next, val));
+            try{
+                evalTerm.push_back(eval_term(terms->next, val));
+            } catch (exception &Err){
+                exit(1);
+            }
+
             break;
         case MINUS:
-            evalTerm.push_back(eval_term(terms->next, val) * -1);
+            try{
+                evalTerm.push_back(eval_term(terms->next, val) * -1);
+            } catch (exception &Err){
+                exit(1);
+            }
             break;
     }
 
