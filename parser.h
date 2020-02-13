@@ -58,6 +58,7 @@ struct argument{
 
 struct poly_eval{
     std::string polyName;
+    int line_no;
     std::vector<struct argument*> args;
 };
 
@@ -71,9 +72,6 @@ struct stmt{
 
 int eval_term(struct term_list* termList);
 void eval_polynomial();
-struct argument* get_last_arg_struct(struct poly_eval* p);
-//void execute_program(struct stmt * start);
-void assign_num();
 int evaluate_polynomial(struct poly_eval* poly);
 int eval_term(struct term_list* terms, std::vector<int> val);
 
@@ -100,7 +98,7 @@ private:
     stmt * parse_poly_evaluation_statement();
     stmt * parse_input_statement();
     poly_eval * parse_polynomial_evaluation();
-    void parse_argument_list();
+    poly_eval * parse_argument_list();
     argument * parse_argument();
     void syntax_error();
     Token expect(TokenType expected_type);

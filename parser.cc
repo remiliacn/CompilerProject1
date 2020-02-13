@@ -57,7 +57,6 @@ int varIdx = 0;
 map<string, int> inputMap;
 int memory[100];
 vector<int> inputNum;
-vector<struct argument*> argVec;
 vector<struct id_list*> idVec;
 vector<struct poly_decl_struct*> polyVec;
 vector<monomial*> monoVec;
@@ -105,12 +104,18 @@ void Parser::parse_poly_decl_section(){
 
 struct poly_decl_struct* Parser::parse_poly_decl(){
     auto* poly = new poly_decl_struct;
-    expect(POLY);
-    poly->header = parse_polynomial_header();
+    t = lexer.GetToken();
+    if (t.token_type == POLY){
+        poly->header = parse_polynomial_header();
 
-    expect(EQUAL);
-    poly->body = parse_polynomial_body();
-    expect(SEMICOLON);
+        expect(EQUAL);
+        poly->body = parse_polynomial_body();
+        expect(SEMICOLON);
+
+    } else {
+        syntax_error();
+    }
+
     return poly;
 }
 
@@ -126,7 +131,6 @@ struct polynomial_header* Parser::parse_polynomial_header(){
     param->name = "x";
     param->order = 0;
     idVec.clear();
-
 
     header->name = parse_polynomial_name();
     header->decl_line = t.line_no;
@@ -286,7 +290,7 @@ int Parser::parse_coefficient() {
 
 //START command
 struct stmt* Parser::parse_start() {
-    struct stmt* st;
+    struct stmt *st = nullptr;
     t = lexer.GetToken();
     if(t.token_type == START){
         st = parse_statement_list();
@@ -336,24 +340,9 @@ void Parser::parse_inputs(stmt* st) {
         syntax_error();
     }
 }
-/*
-void Parser::parse_statement_list() {
-    t = peek();
-    if(t.token_type == INPUT || t.token_type == ID){
-        stmt* st = parse_statement();
-        stmtVec.push_back(st);
-    }else{
-        syntax_error();
-    }
-    t = peek();
-    if (t.token_type == INPUT || t.token_type == ID){
-        parse_statement_list();
-    }
-}
-*/
 
 struct stmt* Parser::parse_statement_list() {
-    stmt* st;
+    stmt *st = nullptr;
     t = peek();
     if(t.token_type == INPUT || t.token_type == ID){
         st = parse_statement();
@@ -364,7 +353,7 @@ struct stmt* Parser::parse_statement_list() {
     t = peek();
     if (t.token_type == INPUT || t.token_type == ID){
         st->next = parse_statement_list();
-    } else if (t.token_type == NUM){
+    } else if (t.token_type == NUM || t.token_type == END_OF_FILE){
         return st;
     } else{
         syntax_error();
@@ -374,7 +363,7 @@ struct stmt* Parser::parse_statement_list() {
 }
 
 struct stmt* Parser::parse_statement() {
-    struct stmt* st;
+    struct stmt *st = nullptr;
     t = peek();
     if(t.token_type == INPUT){
         st = parse_input_statement();
@@ -411,61 +400,92 @@ struct stmt* Parser::parse_poly_evaluation_statement() {
     st->stmt_type = POLYEVAL;
     st->poly = parse_polynomial_evaluation();
     expect(SEMICOLON);
-    argVec.clear();
     return st;
 }
 
 struct poly_eval* Parser::parse_polynomial_evaluation() {
     auto* polyEval = new poly_eval;
     vector<struct id_list*> idList;
-
-    polyEval->polyName = parse_polynomial_name();
-    int nameLine = t.line_no;
-
     bool find = false;
+    auto* temp = new poly_eval;
+
+    t = expect(ID);
+    int errorCode3Num = t.line_no;
     for (auto &i : polyVec){
-        if (i->header->name == polyEval->polyName){
+        if (i->header->name == t.lexeme){
+            polyEval->polyName = t.lexeme;
+            polyEval->line_no = t.line_no;
+            //idList = i->header->idList;
             find = true;
-            idList = i->header->idList;
             break;
         }
     }
 
     if (!find){
+        t = expect(LPAREN);
+        temp = parse_argument_list();
+        t = expect(RPAREN);
+
         error.errorCode = 3;
-        error.errorLine.push_back(t.line_no);
+        error.errorLine.push_back(errorCode3Num);
     }
 
-    t = expect(LPAREN);
-    parse_argument_list();
-    polyEval->args = argVec;
-    size_t argVecSize = 0;
-    for (auto &i : argVec){
-        if (i->arg_type != POLYEVAL){
-            argVecSize++;
-        }
-    }
     if (find){
-        if (argVecSize != idList.size()){
+        t = expect(LPAREN);
+        temp = parse_argument_list();
+        polyEval->args = temp->args;
+
+        std::string polyName = polyEval->polyName;
+        int nameLine;
+        //bool swapped = false;
+        vector<argument*> tempStorage;
+        for (auto &i : polyVec){
+            if (i->header->name == polyName){
+                idList = i->header->idList;
+                nameLine = polyEval->line_no;
+            }
+        }
+
+        if (temp->args.size() != idList.size()){
             if (error.errorCode == 0 || error.errorCode == 4){
                 error.errorCode = 4;
                 error.errorLine.push_back(nameLine);
             }
         }
+
+        t = expect(RPAREN);
+
+
     }
-    expect(RPAREN);
+
     return polyEval;
 }
 
-void Parser::parse_argument_list() {
-    argument* arg = parse_argument();
-    argVec.push_back(arg);
-    t = lexer.GetToken();
-    if(t.token_type == COMMA){
-        parse_argument_list();
-    } else{
-        lexer.UngetToken(t);
+struct poly_eval* Parser::parse_argument_list() {
+    auto* temp = new poly_eval;
+    argument* arg;
+    t = peek();
+    if(t.token_type == ID || t.token_type == NUM) {
+        arg = parse_argument();
+        temp->args.push_back(arg);
+        temp->line_no = t.line_no;
+
+        t = lexer.GetToken();
+        if (t.token_type == COMMA) {
+            auto* temp2 = parse_argument_list();
+            for(auto &i : temp2->args){
+                temp->args.push_back(i);
+            }
+
+        } else{
+            lexer.UngetToken(t);
+        }
+
+    }else{
+        syntax_error();
     }
+
+    return temp;
 }
 
 
@@ -479,24 +499,21 @@ struct argument* Parser::parse_argument() {
         lexer.UngetToken(t);
         if (temp.token_type == LPAREN){
             arg->arg_type = POLYEVAL;
-            //lexer.UngetToken(t);
             arg->polyEval = parse_polynomial_evaluation();
+            return arg;
 
-        } else if (temp.token_type != LPAREN && t.token_type == ID){
+        } else {
             arg->arg_type = ID;
             t = lexer.GetToken();
-            if (inputMap.count(t.lexeme) == 1){
+            if (inputMap.count(t.lexeme) == 1) {
                 arg->var_idx = inputMap[t.lexeme];
 
-            } else{
+            } else {
                 error.errorCode = 5;
                 error.errorLine.push_back(t.line_no);
-                //lexer.UngetToken(t);
                 arg->var_idx = INT_MAX;
                 return arg;
             }
-        } else{
-            syntax_error();
         }
 
     } else if(t.token_type == NUM){
@@ -577,6 +594,7 @@ int evaluate_polynomial(struct poly_eval* poly) {
     vector<int> val;
     //vector<int> coefficient;
     vector<int> exponents;
+    vector<struct argument*> argVec;
     argVec = poly->args;
     int res = 1;
     for (auto & i : polyVec) {
@@ -591,7 +609,7 @@ int evaluate_polynomial(struct poly_eval* poly) {
                         try{
                             val.push_back(evaluate_polynomial(j->polyEval));
                         } catch (exception &err){
-
+                            exit(1);
                         }
 
                     }
@@ -658,7 +676,6 @@ int eval_term(struct term_list* terms, vector<int> val) {
     firstEvaluation = true;
     return res;
 }
-
 
 int main()
 {
