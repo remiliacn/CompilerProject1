@@ -18,6 +18,7 @@ struct poly_decl_struct{
 struct polynomial_header{
     std::string name;
     std::vector<struct id_list*> idList;
+    //for error code traceback.
     int decl_line;
 
 };
@@ -58,6 +59,7 @@ struct argument{
 
 struct poly_eval{
     std::string polyName;
+    //for every code.
     int line_no;
     std::vector<struct argument*> args;
 };
@@ -70,8 +72,6 @@ struct stmt{
     struct stmt* next;
 };
 
-int eval_term(struct term_list* termList);
-void eval_polynomial();
 int evaluate_polynomial(struct poly_eval* poly);
 int eval_term(struct term_list* terms, std::vector<int> val);
 
